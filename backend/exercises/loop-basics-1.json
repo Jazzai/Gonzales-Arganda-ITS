@@ -1,0 +1,17 @@
+{
+    "id": "loop-basics-1",
+    "title": "Loop basics",
+    "statement": "Fix the program so the loop body never runs and it prints Done. Before running, predict the value of count at the first while check.",
+    "starter_code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int count = 1;\n    while (count > 0) {\n        count--;\n    }\n    cout << \"Done\" << endl;\n    return 0;\n}\n",
+    "checkpoints": [
+        {
+            "id": "cp1",
+            "line": 6,
+            "kind": "value",
+            "expr": "count",
+            "question": "What is the value of count at the first while check?",
+            "tests": [{ "input": "", "op": "le", "expected": "0" }]
+        }
+    ],
+    "hidden": {"category": "Iteration"}
+}
