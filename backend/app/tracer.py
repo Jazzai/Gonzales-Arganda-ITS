@@ -1,0 +1,25 @@
+import secrets
+
+def instrument(code: str, cp: dict) -> tuple[str, str]:
+    lines = code.split("\n")
+    idk = cp["line"] - 1
+    if not 0 <= idx < len(lines):
+        raise ValueError("Checkpoint line out of range")
+
+    marker = f"@@CP {secret.token_hex(4)}"
+    if cp["kind"] == "value":
+        probe = f'std::cerr << "{marker}|{cp["id"]}|" << ({cp["expr"]}) << "\\n";'
+    elif cp["kind"] == "hits":
+        probe = f'std::cerr << "{marker}|{cp["id"]}|hit\\n";'
+    else:
+        raise ValueError(f"Uknown checkpoint kind: {cp['kind']}")
+
+    lines[idx] = probe + " " + lines[idx]
+    return "\n".join(lines), marker
+
+def extract(stderr: str, marker: str, cp: dict) -> str | None:
+    prefix = f"{marker}|{cp['id']}|"
+    vals = [l[len(prefix):] for l in stderr.splitlines() if l.startswith(prefix)]
+    if cp["kind"] == "hits":
+        return str (len(vals))
+    return vals[0] if vals else None
