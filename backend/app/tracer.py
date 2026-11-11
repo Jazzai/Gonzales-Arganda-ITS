@@ -2,11 +2,11 @@ import secrets
 
 def instrument(code: str, cp: dict) -> tuple[str, str]:
     lines = code.split("\n")
-    idk = cp["line"] - 1
+    idx = cp["line"] - 1
     if not 0 <= idx < len(lines):
         raise ValueError("Checkpoint line out of range")
 
-    marker = f"@@CP {secret.token_hex(4)}"
+    marker = f"@@CP {secrets.token_hex(4)}"
     if cp["kind"] == "value":
         probe = f'std::cerr << "{marker}|{cp["id"]}|" << ({cp["expr"]}) << "\\n";'
     elif cp["kind"] == "hits":
