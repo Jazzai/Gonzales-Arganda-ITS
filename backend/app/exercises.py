@@ -4,8 +4,8 @@ from pathlib import Path
 
 EX_DIR = Path(__file__).resolve().parent.parent / "exercises"
 
-def get_exercises(exercise_id: str) -> dict | None:
-    if not re.fullmatch(r"[a-z0-9]+", exercise_id):
+def get_exercise(exercise_id: str) -> dict | None:
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", exercise_id):
         return None
     path = EX_DIR / f"{exercise_id}.json"
     return json.loads(path.read_text()) if path.is_file() else None
