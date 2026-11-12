@@ -6,7 +6,7 @@ This guide gets the project running on **macOS** or **Windows 10/11**.
 | Part | Stack | Port |
 |------|-------|------|
 | `backend/` | Python 3.12, FastAPI, g++ (compiles student code) | 8000 |
-| `frontend/` | Next.js, React, TypeScript, Tailwind | 3000 |
+| `frontend/` | React, Vite | 3000 |
 | LLM | Ollama running `llama3` | 11434 |
 
 > Use **Python 3.12**. Newer versions (3.13+) can break dependencies that don't have prebuilt packages yet.
@@ -76,7 +76,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ## 2. Get the code
 
 ```bash
-git clone https://github.com/<owner>/Gonzales-Arganda-ITS.git
+git clone https://github.com/Jazzai/Gonzales-Arganda-ITS.git
 cd Gonzales-Arganda-ITS
 ```
 
@@ -90,7 +90,7 @@ Gonzales-Arganda-ITS/
 │   ├── tests/
 │   ├── .env.example
 │   └── requirements.txt
-├── frontend/           # Next.js app
+├── frontend/           # React + Vite app
 ├── legacy/             # Old code. Do not modify without permission
 └── SETUP.md
 ```
@@ -99,16 +99,6 @@ Gonzales-Arganda-ITS/
 
 ## 3. Backend setup
 
-### macOS
-
-```bash
-cd backend
-python3.12 -m venv .venv
-source .venv/bin/activate
-python --version              # must say 3.12.x
-pip install -r requirements.txt
-cp .env.example .env
-```
 
 ### Windows (PowerShell)
 
@@ -174,12 +164,6 @@ Open http://localhost:8000/docs to see the interactive API page.
 
 Used for Socratic hint generation. If Ollama isn't running, the backend falls back to static hints, so everything else still works.
 
-### macOS
-
-```bash
-brew services start ollama
-ollama pull llama3
-```
 
 ### Windows
 
@@ -206,14 +190,13 @@ cd frontend
 npm install
 ```
 
-Create `frontend/.env.local` with:
+The frontend reads the backend URL from `VITE_API_URL`. The default is `http://127.0.0.1:8000`, so no environment file is required for the local setup. To override it, create `frontend/.env.local`:
 
 ```
-NEXT_PUBLIC_API_URL=http://localhost:8000
+VITE_API_URL=http://127.0.0.1:8000
 ```
 
-- macOS: `echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local`
-- Windows: `Set-Content .env.local "NEXT_PUBLIC_API_URL=http://localhost:8000"`
+Vite starts at http://localhost:3000, matching the backend's default CORS origin.
 
 Start it:
 
@@ -228,9 +211,18 @@ Open http://localhost:3000.
 ## 6. Smoke test
 
 1. Backend running on :8000, frontend on :3000.
-2. In the browser, leave the starter code unchanged, enter `0` as the prediction, and click **Submit Prediction**.
-3. Expected: Prediction `0`, Actual `1`, Required `le 0`, plus a Hint 1 message (Case C).
-4. Change `int count = 1;` to `int count = 0;`, predict `0`, and submit. Expected: all three cards match and no hint (Case A).
+2. In the browser, leave the starter code unchanged and click **Run & Check** to open the first checkpoint.
+3. Enter `0` as the prediction, click **Submit Prediction**, then click **Run & Check** again.
+4. Expected: Prediction `0`, Actual `1`, Required `≤ 0`, plus a tutor hint (Case C). If Ollama is not running, the backend uses its static fallback hint.
+5. Change `int count = 1;` to `int count = 0;`, enter prediction `0`, click **Submit Prediction**, then **Run & Check**. Expected: all three comparison cards match and the exercise is verified (Case A).
+6. Open **My Activities** to try the Function and Computation exercises. Each includes selectable sample inputs.
+7. Open **Settings** to set the assigned anonymous participant code and tutor condition. Open **Your attempts** from an activity and download the research CSV.
+
+## Research prototype scope and safety
+
+The backend currently provides three single-checkpoint exercises (Iteration, Function, Computation), sample-input selection, EED/generic hint conditions, rule-based error categories, a four-stage hint/fallback progression, runtime output, and JSONL event logging. It does not randomize study conditions or implement pre/post tests; those must follow the approved research protocol.
+
+**Local controlled use only:** the compiler runs submitted C++ code on the backend machine. Keep Uvicorn bound to localhost and do not expose this service publicly or to an untrusted network. Before shared deployment, add an OS/container sandbox, CPU/memory/process/file/network limits, authentication, and authorization. The research CSV export is unauthenticated and is not suitable for public hosting.
 
 ---
 
@@ -274,9 +266,9 @@ Windows and macOS use different line endings. To avoid noisy diffs, add a `.gita
 | `g++: command not found` / `'g++' is not recognized` | macOS: `xcode-select --install`. Windows: confirm `C:\msys64\ucrt64\bin` is on PATH and reopen PowerShell. |
 | `Activate.ps1 cannot be loaded because running scripts is disabled` | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once. |
 | Browser shows a CORS error | `CORS_ORIGINS` in `backend/.env` must match the frontend URL exactly, then restart the backend. |
-| Frontend says "Failed to fetch" | Backend isn't running, or `NEXT_PUBLIC_API_URL` is wrong. Restart `npm run dev` after editing `.env.local`. |
+| Frontend says "Failed to fetch" | Backend isn't running, or `VITE_API_URL` is wrong. Restart `npm run dev` after editing `.env.local`. |
 | Hints always look like generic static text | Ollama isn't running or `llama3` isn't pulled. Run `ollama list`. |
-| `Address already in use` on 8000 or 3000 | Another process holds the port. Stop it, or use `--port 8001` (and update `NEXT_PUBLIC_API_URL` and `CORS_ORIGINS` if needed). |
+| `Address already in use` on 8000 or 3000 | Another process holds the port. Stop it, or change the backend port and update `VITE_API_URL` and `CORS_ORIGINS` to match. |
 | `pip install` fails building `pydantic-core` | You are on a too-new Python. Recreate the venv with 3.12. |
 
 ---

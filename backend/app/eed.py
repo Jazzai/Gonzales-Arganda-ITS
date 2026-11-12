@@ -21,9 +21,9 @@ def meets_spec(actual: str, expected: str, op: str) -> bool:
         return equal(actual, expected)
     return OPS[op](x, y)
 
-def decide(p: str, a:str, e: str, op: str) -> str:
+def decide(p: str, a: str, e: str, op: str, output_ok: bool = True) -> str:
     predicted_correctly = equal(p, a)
-    code_ok = meets_spec(a, e, op)
+    code_ok = meets_spec(a, e, op) and output_ok
     if predicted_correctly and code_ok:
         return "A"
     if not predicted_correctly and code_ok:

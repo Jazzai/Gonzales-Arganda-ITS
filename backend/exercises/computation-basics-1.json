@@ -1,0 +1,39 @@
+{
+    "id": "computation-basics-1",
+    "order": 3,
+    "title": "Expression evaluation",
+    "category": "Computation",
+    "summary": "Trace an arithmetic expression and reason about operator grouping.",
+    "statement": "Fix the expression so it adds a and b before multiplying by c. Predict total for the selected input.",
+    "specification": {
+        "input": "Three space-separated integers a, b, and c.",
+        "output": "Print (a + b) multiplied by c, followed by a newline.",
+        "constraints": "Use integer arithmetic and keep the program as a single-file C++17 program."
+    },
+    "starter_code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int a, b, c;\n    cin >> a >> b >> c;\n    int total = a + b * c;\n    cout << total << endl;\n    return 0;\n}\n",
+    "sample_tests": [
+        {"label": "Input 2 3 4", "input": "2 3 4", "expected_output": "20"},
+        {"label": "Input 1 5 3", "input": "1 5 3", "expected_output": "18"}
+    ],
+    "hidden_tests": [
+        {"input": "3 2 5", "expected_output": "25"}
+    ],
+    "checkpoints": [
+        {
+            "id": "cp1",
+            "line": 8,
+            "anchor": "cout\\s*<<\\s*total",
+            "kind": "value",
+            "expr": "total",
+            "question": "What value is stored in total after this expression is evaluated?",
+            "tests": [
+                {"label": "Input 2 3 4", "input": "2 3 4", "op": "eq", "expected": "20", "expected_output": "20"},
+                {"label": "Input 1 5 3", "input": "1 5 3", "op": "eq", "expected": "18", "expected_output": "18"}
+            ]
+        }
+    ],
+    "hidden": {
+        "category": "Computation",
+        "reference_solution": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int a, b, c;\n    cin >> a >> b >> c;\n    int total = (a + b) * c;\n    cout << total << endl;\n    return 0;\n}\n"
+    }
+}

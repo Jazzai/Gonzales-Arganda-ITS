@@ -4,6 +4,8 @@ import httpx
 
 from .llm import chat
 
+HINT_LIMIT = 4
+
 SYSTEM = (
     "You are a Socratic C++ tutor for novice students. Never write corrected code "
     "and never state exactly which line to change. Reply in at most two sentences."
@@ -50,6 +52,8 @@ def build_prompt(*, level, condition, statement, code, question, prediction, act
     return "\n\n".join(parts)
 
 async def generate_hint(**kw) -> str:
+    if kw["level"] >= HINT_LIMIT:
+        return STATIC_FALLBACK[HINT_LIMIT]
     prompt = build_prompt(**kw)
     try:
         for _ in range(3):
@@ -57,5 +61,5 @@ async def generate_hint(**kw) -> str:
             if not looks_like_code(text):
                 return text
     except httpx.HTTPError:
-        pass
+        return STATIC_FALLBACK[kw["level"]]
     return STATIC_FALLBACK[kw["level"]]

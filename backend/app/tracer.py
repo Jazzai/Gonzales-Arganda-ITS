@@ -1,10 +1,24 @@
 import secrets
+import re
+
+
+def locate_checkpoint_line(code: str, cp: dict) -> int:
+    lines = code.split("\n")
+    anchor = cp.get("anchor")
+    if anchor:
+        matches = [index + 1 for index, line in enumerate(lines) if re.search(anchor, line)]
+        if len(matches) != 1:
+            raise ValueError(f"Expected one checkpoint anchor, found {len(matches)}")
+        return matches[0]
+
+    line = cp["line"]
+    if not 1 <= line <= len(lines):
+        raise ValueError("Checkpoint line out of range")
+    return line
 
 def instrument(code: str, cp: dict) -> tuple[str, str]:
     lines = code.split("\n")
-    idx = cp["line"] - 1
-    if not 0 <= idx < len(lines):
-        raise ValueError("Checkpoint line out of range")
+    idx = locate_checkpoint_line(code, cp) - 1
 
     marker = f"@@CP {secrets.token_hex(4)}"
     if cp["kind"] == "value":
