@@ -19,8 +19,8 @@ app = FastAPI(title="Socratic C++ ITS")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split("."),
-    allow_methids=["*"],
-    allow_header=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class CheckRequest(BaseModel):
