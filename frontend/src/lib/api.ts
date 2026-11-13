@@ -17,7 +17,7 @@ export type Exercise = {
 export type CheckResult = {
     status: "ok" | "compile_error" | "checkpoint_not_reached" | "not_sure";
     case?: "A" | "B" | "C" | "D";
-    comparison?: string | null;
+    comparison?: { prediction: string; actual: string; required: string };
     category?: string | null;
     tutor?: { level: number; message: string } | null;
     detail?: string;
