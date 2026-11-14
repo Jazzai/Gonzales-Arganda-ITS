@@ -1,9 +1,9 @@
 "use client"
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { check, CheckResult, Exercise } from "@/lib/api";
 
 export function useTutor(exercise: Exercise | null, condition: "eed" | "generic" = "eed") {
-    const [sessionId] = useState (() => crypto.randomUUID());
+    const sessionId = useRef<string | null>(null);
     const [code, setCode] = useState("");
     const [prediction, setPrediction] = useState("");
     const [result, setResult] = useState<CheckResult | null>(null);
@@ -17,13 +17,14 @@ export function useTutor(exercise: Exercise | null, condition: "eed" | "generic"
     const submit = useCallback(
         async (notSure = false) => {
             if (!exercise) return;
+            sessionId.current ??= crypto.randomUUID();
             setLoading(true);
             setError(null);
             try {
                 setResult(
                     await check({
                         exercise_id: exercise.id,
-                        session_id: sessionId,
+                        session_id: sessionId.current,
                         checkpoint_id: exercise.checkpoints[0].id,
                         test_case: 0,
                         code,

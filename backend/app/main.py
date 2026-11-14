@@ -18,7 +18,7 @@ from .tracer import extract, instrument
 app = FastAPI(title="Socratic C++ ITS")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins.split("."),
+    allow_origins=settings.cors_origins.split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -50,7 +50,7 @@ async def check(req: CheckRequest):
     test = cp["tests"][req.test_case]
 
     if req.prediction is None:
-        return {"stauts": "not_sure"}
+        return {"status": "not_sure"}
 
     source, marker = instrument(req.code, cp)
     try:
@@ -73,7 +73,7 @@ async def check(req: CheckRequest):
         message = await generate_hint(
             level=level, condition=req.condition, statement=ex["statement"],
             code=req.code, question=cp["question"], prediction=req.prediction,
-            actual=actual, rewquired=required, category=category,
+            actual=actual, required=required, category=category,
         )
         tutor = {"level": level, "message": message}
     elif case == "B":
@@ -87,7 +87,7 @@ async def check(req: CheckRequest):
 
     log_event({
         "session": req.session_id, "exercise": ex["id"], "checkpoint": cp["id"],
-        "condition": req.condtion, "prediction": req.prediction, "actual": actual,
+        "condition": req.condition, "prediction": req.prediction, "actual": actual,
         "required": required, "case": case, "category": category, "tutor": tutor,
     })
     return {

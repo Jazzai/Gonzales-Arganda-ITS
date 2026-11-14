@@ -34,7 +34,7 @@ export type CheckBody = {
 };
 
 export async function getExercise(id: string): Promise<Exercise> {
-    const r = await fetch(`${API}/api/exercise/${id}`);
+    const r = await fetch(`${API}/api/exercises/${id}`);
     if (!r.ok) throw new Error(`Exercise load failed (${r.status})`);
     return r.json();
 };

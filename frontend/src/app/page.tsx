@@ -1,4 +1,4 @@
-"use Client";
+"use client";
 import { ComparisonCards } from "@/components/ComparisonCards";
 import { TutorBubble } from "@/components/TutorBubble";
 import { useExercise } from "@/hooks/useExercise";
