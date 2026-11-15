@@ -11,6 +11,15 @@ const PARTICIPANT_KEY = 'practice-cpp-tutor:participant-id'
 const BAUBLE_POSITION_KEY = 'practice-cpp-tutor:bauble-position'
 const BAUBLE_SIZE = 76
 
+function getSavedCode(exerciseId, starterCode) {
+  const savedCode = localStorage.getItem(exerciseStorageKey(exerciseId))
+  if (!savedCode) return starterCode
+  if (exerciseId === 'loop-basics-1' && /\bint\s+count\s*=/.test(savedCode)) {
+    return savedCode.replace(/\bcount\b/g, 'parcel')
+  }
+  return savedCode
+}
+
 const NAV_ITEMS = [
   { id: 'activities', label: 'My Activities', icon: 'grid' },
   { id: 'logic', label: 'Code Logic', icon: 'code' },
@@ -18,7 +27,7 @@ const NAV_ITEMS = [
 
 const WALKTHROUGH = [
   ['Predict', 'Read the code and predict the value at the checkpoint before running it.'],
-  ['Run', 'Use Run & Check to execute the program and record what happens.'],
+  ['Run', 'Use Run Code to compile the current source, or Run & Check to record a checkpoint attempt.'],
   ['Compare', 'Compare your prediction with actual execution and the required result.'],
   ['Reflect', 'Trace the relevant lines and use the tutor’s question to explain any difference.'],
   ['Revise', 'Submit a new prediction. Change your code only if it does not meet the required result.'],
@@ -124,6 +133,8 @@ function App() {
   const [lastPrediction, setLastPrediction] = useState(null)
   const [predictionPending, setPredictionPending] = useState(false)
   const [result, setResult] = useState(null)
+  const [compilerResult, setCompilerResult] = useState(null)
+  const [runInput, setRunInput] = useState('')
   const [traceAttempts, setTraceAttempts] = useState([])
   const [activeTab, setActiveTab] = useState('prediction')
   const [hintVisible, setHintVisible] = useState(true)
@@ -149,7 +160,7 @@ function App() {
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.detail || `The backend returned HTTP ${response.status}.`)
       setExercise(data)
-      setCode(localStorage.getItem(exerciseStorageKey(exerciseId)) || data.starter_code)
+      setCode(getSavedCode(exerciseId, data.starter_code))
       setCheckpointIndex(0)
       setTestCaseIndex(0)
     } catch (error) {
@@ -204,6 +215,8 @@ function App() {
     setExerciseId(id)
     setExercise(null)
     setCode('')
+    setCompilerResult(null)
+    setRunInput('')
     setCheckpointIndex(0)
     setTestCaseIndex(0)
     setCheckpointActive(false)
@@ -226,6 +239,8 @@ function App() {
       if (id === exerciseId) {
         setExercise(data)
         setCode(data.starter_code)
+        setCompilerResult(null)
+        setRunInput('')
         setSessionId(makeId('S'))
         setCheckpointIndex(0)
         setTestCaseIndex(0)
@@ -254,6 +269,8 @@ function App() {
     setLastPrediction(null)
     setPredictionPending(false)
     setResult(null)
+    setCompilerResult(null)
+    setRunInput('')
     setTraceAttempts([])
     setBackendError('')
     setSessionId(makeId('S'))
@@ -291,6 +308,29 @@ function App() {
     setBackendError('')
   }
 
+  const runProgram = async () => {
+    if (pageBusy) return
+    setPageBusy(true)
+    setBackendError('')
+    setResult(null)
+    setCompilerResult(null)
+    try {
+      const response = await fetch(`${API_URL}/api/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, stdin: runInput }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.detail || `The backend returned HTTP ${response.status}.`)
+      setCompilerResult(data)
+      setActiveTab('output')
+    } catch (error) {
+      setBackendError(error.message || 'The program could not be compiled and run.')
+    } finally {
+      setPageBusy(false)
+    }
+  }
+
   const runCheck = async () => {
     if (pageBusy) return
     if (!checkpointActive) {
@@ -304,6 +344,7 @@ function App() {
     setPageBusy(true)
     setBackendError('')
     setHintVisible(true)
+    setCompilerResult(null)
     try {
       const response = await fetch(`${API_URL}/api/check`, {
         method: 'POST',
@@ -322,16 +363,16 @@ function App() {
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.detail || `The backend returned HTTP ${response.status}.`)
       if (data.status === 'compile_error') {
-        setResult(data)
+        setResult(null)
+        setCompilerResult(data)
         setPredictionPending(false)
-        setBackendError(`Your C++ code did not compile.\n${data.detail || ''}`)
         setActiveTab('output')
         return
       }
       if (data.status === 'checkpoint_not_reached') {
         setResult(data)
         setPredictionPending(false)
-        setActiveTab('trace')
+        setActiveTab('output')
         return
       }
       if (data.status === 'not_sure') {
@@ -426,7 +467,10 @@ function App() {
   }
 
   return (
-    <div className={`app-shell theme-${settings.theme}`} style={{ '--editor-font-size': `${fontSize}px` }}>
+    <div className={`app-shell theme-${settings.theme}`} style={{
+      '--editor-font-size': `${fontSize}px`,
+      '--editor-line-height': `${fontSize * 1.8}px`,
+    }}>
       <header className="topbar">
         <button className="brand" type="button" onClick={() => setView('activities')}>
           <Icon name="sparkle" size={25} />
@@ -435,9 +479,14 @@ function App() {
         <div className="topbar-actions">
           <span className="save-status"><span className="save-dot" />{saved ? 'Saved' : 'Saving…'}</span>
           {headerAction && (
-            <button className="button button-primary top-run" type="button" onClick={headerAction} disabled={pageBusy || !exercise}>
-              <Icon name="play" size={17} />{pageBusy ? 'Checking…' : 'Run & Check'}
-            </button>
+            <div className="topbar-run-actions">
+              <button className="button button-secondary top-run" type="button" onClick={runProgram} disabled={pageBusy || !exercise}>
+                <Icon name="play" size={17} />{pageBusy ? 'Running…' : 'Run Code'}
+              </button>
+              <button className="button button-primary top-run" type="button" onClick={headerAction} disabled={pageBusy || !exercise}>
+                <Icon name="check" size={17} />{pageBusy ? 'Checking…' : 'Run & Check'}
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -487,7 +536,10 @@ function App() {
             loadError={exerciseError}
             retry={loadExercise}
             code={code}
-            setCode={setCode}
+            setCode={(value) => { setCode(value); setCompilerResult(null); setResult(null); setBackendError('') }}
+            compilerResult={compilerResult}
+            runInput={runInput}
+            setRunInput={setRunInput}
             lineCount={lineCount}
             activeLine={activeLine}
             stateLabel={stateLabel}
@@ -713,7 +765,7 @@ function evaluateCondition(value, operator, boundary) {
 
 function Workspace(props) {
   const {
-    exercise, loading, loadError, retry, code, setCode, lineCount, activeLine, stateLabel,
+    exercise, loading, loadError, retry, code, setCode, compilerResult, runInput, setRunInput, lineCount, activeLine, stateLabel,
     checkpointActive, checkpoint, testCase, testCaseIndex, setTestCaseIndex,
     prediction, setPrediction, lastPrediction, predictionPending, submitPrediction,
     runCheck, submitNotSure, pageBusy, activeTab, setActiveTab, result, traceAttempts, outcome, comparison, requiredText,
@@ -780,7 +832,7 @@ function Workspace(props) {
               ))}
             </div>
             <div className="code-area">
-              <pre className="code-highlight" ref={highlightRef} aria-hidden="true" style={{ fontSize: `${fontSize}px` }}>
+              <pre className="code-highlight" ref={highlightRef} aria-hidden="true">
                 {code.split('\n').map((line, index) => (
                   <div className={`code-line ${index + 1 === activeLine ? 'current-line' : ''}`} key={index}>
                     {highlightLine(line) || '\u00a0'}
@@ -797,7 +849,6 @@ function Workspace(props) {
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
                 onScroll={onEditorScroll}
-                style={{ fontSize: `${fontSize}px` }}
               />
               {checkpointActive && activeLine && (
                 <span className={`line-badge ${!predictionPending && outcome === 'A' ? 'badge-success' : !predictionPending && (outcome === 'C' || outcome === 'D') ? 'badge-error' : ''}`}>
@@ -939,12 +990,37 @@ function Workspace(props) {
             {activeTab === 'output' && (
               <div className="output-content">
                 <h3>Program Output</h3>
-                {!result || result.status === 'not_sure' ? (
-                  <div className="trace-card"><strong>No output yet</strong><span>{condition === 'generic' ? 'Select Run & Check to execute your code and inspect its output.' : 'The backend checks the checkpoint and prediction together.'}</span></div>
+                <label className="stdin-input">Standard input for Run Code (optional)
+                  <textarea value={runInput} onChange={(event) => setRunInput(event.target.value)} placeholder="Enter input your program should read" rows={3} />
+                </label>
+                {compilerResult ? (
+                  <>
+                    {compilerResult.status === 'compile_error' ? (
+                      <div className="compiler-output">
+                        <strong>Compilation failed</strong>
+                        <pre>{compilerResult.detail}</pre>
+                      </div>
+                    ) : (
+                      <>
+                        <pre className="output-terminal"><span className="terminal-prompt">$</span>{compilerResult.stdout ? `\n${compilerResult.stdout.trimEnd()}` : ' (no standard output)'}</pre>
+                        {compilerResult.stderr && <pre className="output-terminal output-stderr">{compilerResult.stderr.trimEnd()}</pre>}
+                        <div className={`result-summary ${compilerResult.timed_out || compilerResult.exit_code !== 0 ? 'summary-error' : 'summary-success'}`}>
+                          <strong>{compilerResult.timed_out ? 'Execution timed out' : `Program finished with exit code ${compilerResult.exit_code}`}</strong>
+                          <span>{compilerResult.timed_out ? 'The program exceeded the configured time limit.' : compilerResult.exit_code === 0 ? 'This output came from compiling and running your current code.' : 'Review the runtime error and update your code before running again.'}</span>
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : !result || result.status === 'not_sure' ? (
+                  <div className="trace-card"><strong>No output yet</strong><span>Select Run Code to compile the current source, or use Run &amp; Check to assess the activity.</span></div>
                 ) : result.status === 'compile_error' ? (
                   <div className="trace-card"><strong>Compilation failed</strong><span>{condition === 'generic' ? 'Review the compiler error, update your code, then run it again.' : 'Fix the compiler errors shown above, then submit a new prediction.'}</span></div>
                 ) : result.status === 'checkpoint_not_reached' ? (
-                  <div className="trace-card"><strong>{result.timed_out ? 'Execution timed out before the checkpoint' : 'Checkpoint not reached'}</strong><span>{result.detail || result.runtime_error || 'Review the code and run the check again.'}</span></div>
+                  <>
+                    <div className="trace-card"><strong>{result.timed_out ? 'Execution timed out before the checkpoint' : 'Checkpoint not reached'}</strong><span>{result.detail || result.runtime_error || 'Review the code and run the check again.'}</span></div>
+                    {result.stdout && <pre className="output-terminal"><span className="terminal-prompt">$</span>{`\n${result.stdout.trimEnd()}`}</pre>}
+                    {result.runtime_error && <pre className="output-terminal output-stderr">{result.runtime_error.trimEnd()}</pre>}
+                  </>
                 ) : (
                   <>
                     <pre className="output-terminal"><span className="terminal-prompt">$</span>{result.stdout ? `\n${result.stdout.trimEnd()}` : ' (no standard output)'}</pre>

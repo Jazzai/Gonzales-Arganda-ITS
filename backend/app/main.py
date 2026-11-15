@@ -37,6 +37,10 @@ class CheckRequest(BaseModel):
     prediction: str | None = Field(default=None, max_length=100)
     condition: Literal["eed", "generic"] = "eed"
 
+class RunRequest(BaseModel):
+    code: str = Field(max_length=50_000)
+    stdin: str = Field(default="", max_length=50_000)
+
 
 @app.get("/api/exercises")
 def read_exercises():
@@ -49,6 +53,24 @@ def read_exercise(exercise_id: str):
     if ex is None:
         raise HTTPException(404, "Unknown exercise")
     return student_view(ex)
+
+
+@app.post("/api/run")
+async def run_program(req: RunRequest):
+    try:
+        stdout, stderr, timed_out, exit_code = await asyncio.to_thread(
+            compile_and_run, req.code, req.stdin,
+        )
+    except CompileError as e:
+        return {"status": "compile_error", "detail": str(e)}
+
+    return {
+        "status": "ok",
+        "stdout": stdout,
+        "stderr": stderr,
+        "timed_out": timed_out,
+        "exit_code": exit_code,
+    }
 
 
 @app.get("/api/research/export")
@@ -129,13 +151,38 @@ async def check(req: CheckRequest):
         stdout, stderr, timed_out, exit_code = await asyncio.to_thread(
             compile_and_run, source, test["input"],
         )
-    except CompileError as e:
+    except CompileError:
+        try:
+            stdout, stderr, timed_out, exit_code = await asyncio.to_thread(
+                compile_and_run, req.code, test["input"],
+            )
+        except CompileError as source_error:
+            log_event({
+                "participant_id": req.participant_id, "session": req.session_id,
+                "exercise": ex["id"], "checkpoint": cp["id"], "condition": req.condition,
+                "prediction": req.prediction, "status": "compile_error", "detail": str(source_error),
+            })
+            return {"status": "compile_error", "detail": str(source_error)}
+
+        detail = (
+            f"The program compiled, but the checkpoint expression '{cp['expr']}' "
+            "could not be traced. Check that its name matches the variable in your code."
+        )
         log_event({
             "participant_id": req.participant_id, "session": req.session_id,
             "exercise": ex["id"], "checkpoint": cp["id"], "condition": req.condition,
-            "prediction": req.prediction, "status": "compile_error", "detail": str(e),
+            "prediction": req.prediction, "status": "checkpoint_not_reached",
+            "detail": detail, "stdout": stdout, "timed_out": timed_out,
+            "exit_code": exit_code, "runtime_error": stderr,
         })
-        return {"status": "compile_error", "detail": str(e)}
+        return {
+            "status": "checkpoint_not_reached",
+            "detail": detail,
+            "stdout": stdout,
+            "timed_out": timed_out,
+            "exit_code": exit_code,
+            "runtime_error": stderr,
+        }
 
     actual = extract(stderr, marker, cp)
     if actual is None:

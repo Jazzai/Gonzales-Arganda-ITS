@@ -3,14 +3,14 @@
     "order": 1,
     "title": "Empty delivery queue",
     "category": "Iteration",
-    "summary": "Set the starting queue count correctly so a delivery loop skips work when no deliveries are waiting.",
-    "statement": "A delivery system uses count to track parcels waiting to be processed. This run starts with an empty queue, so the loop should process no parcels and print Done. Update the starting count while keeping the existing loop and output code. Before running, predict count at the first while check.",
+    "summary": "Set the starting parcel count correctly so a delivery loop skips work when no deliveries are waiting.",
+    "statement": "A delivery system uses parcel to track how many parcels are waiting to be processed. This run starts with an empty queue, so the loop should process no parcels and print Done. Update the starting parcel count while keeping the existing loop and output code. Before running, predict parcel at the first while check.",
     "specification": {
-        "input": "There is no standard input. The number of waiting parcels is set by the count initializer in the starter code.",
+        "input": "There is no standard input. The number of waiting parcels is set by the parcel initializer in the starter code.",
         "output": "Print exactly Done followed by a newline. Because the queue is empty, the loop body must not execute.",
-        "constraints": "Change only the starting value in int count = 1; so it represents an empty queue.\nKeep the while condition and loop body unchanged.\nDo not change the output statement.\nSubmit a single-file C++17 program."
+        "constraints": "Change only the starting value in int parcel = 1; so it represents an empty queue.\nKeep the while condition and loop body unchanged.\nDo not change the output statement.\nSubmit a single-file C++17 program."
     },
-    "starter_code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int count = 1;\n    while (count > 0) {\n        count--;\n    }\n    cout << \"Done\" << endl;\n    return 0;\n}\n",
+    "starter_code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int parcel = 1;\n    while (parcel > 0) {\n        parcel--;\n    }\n    cout << \"Done\" << endl;\n    return 0;\n}\n",
     "sample_tests": [
         {"label": "Default starting state", "input": "", "expected_output": "Done"}
     ],
@@ -23,7 +23,7 @@
             "line": 6,
             "anchor": "^\\s*while\\s*\\(",
             "kind": "value",
-            "expr": "count",
+            "expr": "parcel",
             "question": "How many parcels are waiting at the first while check?",
             "tests": [
                 {"label": "Default starting state", "input": "", "op": "le", "expected": "0", "expected_output": "Done"}
@@ -32,6 +32,6 @@
     ],
     "hidden": {
         "category": "Iteration",
-        "reference_solution": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int count = 0;\n    while (count > 0) {\n        count--;\n    }\n    cout << \"Done\" << endl;\n    return 0;\n}\n"
+        "reference_solution": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int parcel = 0;\n    while (parcel > 0) {\n        parcel--;\n    }\n    cout << \"Done\" << endl;\n    return 0;\n}\n"
     }
 }

@@ -8,6 +8,107 @@ from app.session import reset
 client = TestClient(main.app)
 
 
+def test_run_compiles_current_code_with_custom_standard_input(monkeypatch):
+    seen = {}
+
+    def fake_compile_and_run(source, stdin_text):
+        seen["source"] = source
+        seen["stdin"] = stdin_text
+        return "Parcel count: 7\n", "", False, 0
+
+    monkeypatch.setattr(main, "compile_and_run", fake_compile_and_run)
+    code = '#include <iostream>\nint main() { int parcel; std::cin >> parcel; std::cout << "Parcel count: " << parcel << "\\n"; }'
+    response = client.post("/api/run", json={"code": code, "stdin": "7\n"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "stdout": "Parcel count: 7\n",
+        "stderr": "",
+        "timed_out": False,
+        "exit_code": 0,
+    }
+    assert seen == {"source": code, "stdin": "7\n"}
+
+
+def test_run_endpoint_compiles_and_executes_edited_program():
+    response = client.post("/api/run", json={
+        "code": '#include <iostream>\nint main() { std::cout << "edited output" << std::endl; }',
+    })
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["stdout"] == "edited output\n"
+    assert response.json()["exit_code"] == 0
+
+
+def test_run_returns_compiler_errors(monkeypatch):
+    def fail_compile(_source, _stdin):
+        raise main.CompileError("main.cpp:1: error: invalid syntax")
+
+    monkeypatch.setattr(main, "compile_and_run", fail_compile)
+    response = client.post("/api/run", json={"code": "not valid c++"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "compile_error",
+        "detail": "main.cpp:1: error: invalid syntax",
+    }
+
+
+def test_check_distinguishes_checkpoint_probe_error_from_source_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(main.settings, "log_path", str(tmp_path / "events.jsonl"))
+    exercise = main.get_exercise("loop-basics-1")
+
+    def compile_probe_but_run_source(source, _stdin):
+        if "@@CP " in source:
+            raise main.CompileError("instrumented checkpoint expression failed")
+        return "Done\n", "", False, 0
+
+    monkeypatch.setattr(main, "compile_and_run", compile_probe_but_run_source)
+    response = client.post("/api/check", json={
+        "exercise_id": exercise["id"],
+        "session_id": "checkpoint-expression-mismatch",
+        "participant_id": "P-checkpoint",
+        "checkpoint_id": "cp1",
+        "code": exercise["starter_code"].replace("parcel", "parce"),
+        "condition": "generic",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "checkpoint_not_reached"
+    assert body["stdout"] == "Done\n"
+    assert "program compiled" in body["detail"]
+    assert "parcel" in body["detail"]
+
+
+def test_check_returns_original_source_compiler_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(main.settings, "log_path", str(tmp_path / "events.jsonl"))
+    exercise = main.get_exercise("loop-basics-1")
+
+    def fail_both_compiles(source, _stdin):
+        if "@@CP " in source:
+            raise main.CompileError("instrumented compiler diagnostic")
+        raise main.CompileError("main.cpp:6: error: 'parcel' was not declared")
+
+    monkeypatch.setattr(main, "compile_and_run", fail_both_compiles)
+    response = client.post("/api/check", json={
+        "exercise_id": exercise["id"],
+        "session_id": "source-compile-error",
+        "participant_id": "P-compile",
+        "checkpoint_id": "cp1",
+        "code": exercise["starter_code"],
+        "condition": "generic",
+    })
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "compile_error",
+        "detail": "main.cpp:6: error: 'parcel' was not declared",
+    }
+
+
 def test_exercise_api_lists_activities_and_hides_oracle():
     response = client.get("/api/exercises")
     assert response.status_code == 200
@@ -83,7 +184,7 @@ def test_generic_success_needs_no_prediction_and_returns_no_hint(monkeypatch, tm
         return "Done\n", f"{marker}|cp1|0\n", False, 0
 
     monkeypatch.setattr(main, "compile_and_run", fake_compile_and_run)
-    code = exercise["starter_code"].replace("int count = 1;", "int count = 0;")
+    code = exercise["starter_code"].replace("int parcel = 1;", "int parcel = 0;")
     response = client.post("/api/check", json={
         "exercise_id": "loop-basics-1",
         "session_id": "generic-success-test",
