@@ -134,7 +134,6 @@ function App() {
   const [predictionPending, setPredictionPending] = useState(false)
   const [result, setResult] = useState(null)
   const [compilerResult, setCompilerResult] = useState(null)
-  const [runInput, setRunInput] = useState('')
   const [traceAttempts, setTraceAttempts] = useState([])
   const [activeTab, setActiveTab] = useState('prediction')
   const [hintVisible, setHintVisible] = useState(true)
@@ -216,7 +215,6 @@ function App() {
     setExercise(null)
     setCode('')
     setCompilerResult(null)
-    setRunInput('')
     setCheckpointIndex(0)
     setTestCaseIndex(0)
     setCheckpointActive(false)
@@ -240,7 +238,6 @@ function App() {
         setExercise(data)
         setCode(data.starter_code)
         setCompilerResult(null)
-        setRunInput('')
         setSessionId(makeId('S'))
         setCheckpointIndex(0)
         setTestCaseIndex(0)
@@ -270,7 +267,6 @@ function App() {
     setPredictionPending(false)
     setResult(null)
     setCompilerResult(null)
-    setRunInput('')
     setTraceAttempts([])
     setBackendError('')
     setSessionId(makeId('S'))
@@ -318,7 +314,7 @@ function App() {
       const response = await fetch(`${API_URL}/api/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, stdin: runInput }),
+        body: JSON.stringify({ code }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.detail || `The backend returned HTTP ${response.status}.`)
@@ -538,8 +534,6 @@ function App() {
             code={code}
             setCode={(value) => { setCode(value); setCompilerResult(null); setResult(null); setBackendError('') }}
             compilerResult={compilerResult}
-            runInput={runInput}
-            setRunInput={setRunInput}
             lineCount={lineCount}
             activeLine={activeLine}
             stateLabel={stateLabel}
@@ -765,7 +759,7 @@ function evaluateCondition(value, operator, boundary) {
 
 function Workspace(props) {
   const {
-    exercise, loading, loadError, retry, code, setCode, compilerResult, runInput, setRunInput, lineCount, activeLine, stateLabel,
+    exercise, loading, loadError, retry, code, setCode, compilerResult, lineCount, activeLine, stateLabel,
     checkpointActive, checkpoint, testCase, testCaseIndex, setTestCaseIndex,
     prediction, setPrediction, lastPrediction, predictionPending, submitPrediction,
     runCheck, submitNotSure, pageBusy, activeTab, setActiveTab, result, traceAttempts, outcome, comparison, requiredText,
@@ -782,6 +776,63 @@ function Workspace(props) {
       highlightRef.current.scrollLeft = event.currentTarget.scrollLeft
     }
     if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop
+  }
+
+  const onEditorKeyDown = (event) => {
+    if (event.key === 'Backspace') {
+      const editor = event.currentTarget
+      const cursor = editor.selectionStart
+      const previousText = code.slice(Math.max(0, cursor - 4), cursor)
+      if (cursor === editor.selectionEnd && previousText.length > 0 && /^ +$/.test(previousText)) {
+        event.preventDefault()
+        const updatedCode = `${code.slice(0, cursor - previousText.length)}${code.slice(cursor)}`
+        setCode(updatedCode)
+        requestAnimationFrame(() => {
+          editor.focus()
+          editor.setSelectionRange(cursor - previousText.length, cursor - previousText.length)
+        })
+      }
+      return
+    }
+    if (event.key !== 'Tab' || event.shiftKey) return
+    event.preventDefault()
+
+    const editor = event.currentTarget
+    const selectionStart = editor.selectionStart
+    const selectionEnd = editor.selectionEnd
+    let updatedCode = code
+    let indentCount = 1
+
+    if (selectionStart === selectionEnd) {
+      updatedCode = `${code.slice(0, selectionStart)}    ${code.slice(selectionEnd)}`
+    } else {
+      const lineStarts = [0]
+      for (let index = 0; index < code.length; index += 1) {
+        if (code[index] === '\n') lineStarts.push(index + 1)
+      }
+
+      const selectedEnd = selectionEnd > selectionStart && code[selectionEnd - 1] === '\n'
+        ? selectionEnd - 1
+        : selectionEnd
+      let firstLine = 0
+      let lastLine = 0
+      for (let line = 0; line < lineStarts.length; line += 1) {
+        if (lineStarts[line] <= selectionStart) firstLine = line
+        if (lineStarts[line] <= selectedEnd) lastLine = line
+      }
+      indentCount = lastLine - firstLine + 1
+
+      for (let line = lastLine; line >= firstLine; line -= 1) {
+        const lineStart = lineStarts[line]
+        updatedCode = `${updatedCode.slice(0, lineStart)}    ${updatedCode.slice(lineStart)}`
+      }
+    }
+
+    setCode(updatedCode)
+    requestAnimationFrame(() => {
+      editor.focus()
+      editor.setSelectionRange(selectionStart + 4, selectionEnd + 4 * indentCount)
+    })
   }
 
   return (
@@ -848,6 +899,7 @@ function Workspace(props) {
                 autoCorrect="off"
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
+                onKeyDown={onEditorKeyDown}
                 onScroll={onEditorScroll}
               />
               {checkpointActive && activeLine && (
@@ -990,9 +1042,6 @@ function Workspace(props) {
             {activeTab === 'output' && (
               <div className="output-content">
                 <h3>Program Output</h3>
-                <label className="stdin-input">Standard input for Run Code (optional)
-                  <textarea value={runInput} onChange={(event) => setRunInput(event.target.value)} placeholder="Enter input your program should read" rows={3} />
-                </label>
                 {compilerResult ? (
                   <>
                     {compilerResult.status === 'compile_error' ? (

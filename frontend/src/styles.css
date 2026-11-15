@@ -317,8 +317,6 @@ button { color: inherit; }
 .compiler-output { margin-top: 12px; padding: 14px; border: 1px solid #793853; border-radius: 6px; background: #211a27; color: #ffc0d9; }
 .compiler-output strong { display: block; margin-bottom: 9px; font-size: 13px; }
 .compiler-output pre { max-height: 260px; overflow: auto; margin: 0; color: #ffb0bf; font: 12px/1.55 'DM Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-.stdin-input { display: grid; gap: 6px; margin: 10px 0; color: var(--muted); font-size: 12px; }
-.stdin-input textarea { width: 100%; resize: vertical; padding: 9px 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--page); color: var(--text); font: 12px 'DM Mono', monospace; }
 .trace-card pre { max-height: 220px; overflow: auto; margin: 8px 0 0; color: inherit; font: 11px 'DM Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .terminal-prompt { color: var(--cyan); }
 .result-summary { display: flex; flex-direction: column; gap: 5px; padding: 13px; border-radius: 6px; background: var(--surface-raised); }
