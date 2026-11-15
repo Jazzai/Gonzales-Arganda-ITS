@@ -11,6 +11,18 @@ SYSTEM = (
     "and never state exactly which line to change. Reply in at most two sentences."
 )
 
+EED_SYSTEM = (
+    f"{SYSTEM} Use the supplied checkpoint, prediction, actual value, requirement, "
+    "and category as evidence. Help the student reason about the specific "
+    "expectation-execution difference without revealing a correction."
+)
+
+GENERIC_SYSTEM = (
+    f"{SYSTEM} Give general guidance based only on the exercise and code. Do not "
+    "refer to predictions, observed runtime values, checkpoint results, hidden "
+    "tests, or error categories."
+)
+
 EED_INTENT = {
     1: "Ask ONE open-ended question about the checkpoint where the divergence occurred.",
     2: "Ask ONE narrower question pointing at the {category} construct involved.",
@@ -26,10 +38,18 @@ GENERIC_INTENT = {
 }
 
 STATIC_FALLBACK = {
-    1: "What do you think happens before this point in the program?",
-    2: "Which statement runs first, and which runs next?",
-    3: "Think about the order in which C++ evaluates and executes statements.",
-    4: "Trace the program line by line and compare each value with the requirement.",
+    "eed": {
+        1: "At this checkpoint, what value do you expect, and which earlier statement supports that expectation?",
+        2: "Which part of the relevant C++ construct determines the value captured at this checkpoint?",
+        3: "The key idea is to trace how execution reaches a checkpoint and how the expression gets its value.",
+        4: "Compare the checkpoint value with the requirement, then trace backward to see how the program produced it.",
+    },
+    "generic": {
+        1: "Which statement would you inspect first to understand how this program behaves, and why?",
+        2: "How does the relevant statement use or change the values in this exercise?",
+        3: "A useful C++ habit is to track how each statement uses and updates program state.",
+        4: "Read the program in execution order and explain how its statements produce the displayed result.",
+    },
 }
 
 def looks_like_code(text: str) -> bool:
@@ -52,14 +72,16 @@ def build_prompt(*, level, condition, statement, code, question, prediction, act
     return "\n\n".join(parts)
 
 async def generate_hint(**kw) -> str:
+    condition = kw["condition"]
     if kw["level"] >= HINT_LIMIT:
-        return STATIC_FALLBACK[HINT_LIMIT]
+        return STATIC_FALLBACK[condition][HINT_LIMIT]
     prompt = build_prompt(**kw)
+    system = EED_SYSTEM if condition == "eed" else GENERIC_SYSTEM
     try:
         for _ in range(3):
-            text = await chat(SYSTEM, prompt)
+            text = await chat(system, prompt)
             if not looks_like_code(text):
                 return text
     except httpx.HTTPError:
-        return STATIC_FALLBACK[kw["level"]]
-    return STATIC_FALLBACK[kw["level"]]
+        return STATIC_FALLBACK[condition][kw["level"]]
+    return STATIC_FALLBACK[condition][kw["level"]]

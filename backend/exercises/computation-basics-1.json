@@ -1,14 +1,14 @@
 {
     "id": "computation-basics-1",
     "order": 3,
-    "title": "Expression evaluation",
+    "title": "Warehouse kit inventory",
     "category": "Computation",
-    "summary": "Trace an arithmetic expression and reason about operator grouping.",
-    "statement": "Fix the expression so it adds a and b before multiplying by c. Predict total for the selected input.",
+    "summary": "Calculate the total components needed for multiple identical kits by correcting one arithmetic expression.",
+    "statement": "A warehouse builds c identical kits. Each kit contains a components of type A and b components of type B, so first find the components in one kit and then multiply by the number of kits. The program already reads all three quantities. Change only the expression assigned to total so it calculates (a + b) * c; leave the input and output statements unchanged. Before running, predict the total for the selected quantities.",
     "specification": {
-        "input": "Three space-separated integers a, b, and c.",
-        "output": "Print (a + b) multiplied by c, followed by a newline.",
-        "constraints": "Use integer arithmetic and keep the program as a single-file C++17 program."
+        "input": "Three space-separated non-negative integers: a and b are the two component counts in one kit, and c is the number of identical kits.",
+        "output": "Print the total number of components required for all c kits, followed by a newline.",
+        "constraints": "Each input is an integer from 0 through 1,000, so the result fits in a standard 32-bit int.\nChange only the arithmetic expression that initializes total.\nAdd a and b before multiplying by c.\nKeep the declarations and input/output code unchanged; submit a single-file C++17 program."
     },
     "starter_code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int a, b, c;\n    cin >> a >> b >> c;\n    int total = a + b * c;\n    cout << total << endl;\n    return 0;\n}\n",
     "sample_tests": [
@@ -25,7 +25,7 @@
             "anchor": "cout\\s*<<\\s*total",
             "kind": "value",
             "expr": "total",
-            "question": "What value is stored in total after this expression is evaluated?",
+            "question": "How many components are required for all the selected kits?",
             "tests": [
                 {"label": "Input 2 3 4", "input": "2 3 4", "op": "eq", "expected": "20", "expected_output": "20"},
                 {"label": "Input 1 5 3", "input": "1 5 3", "op": "eq", "expected": "18", "expected_output": "18"}

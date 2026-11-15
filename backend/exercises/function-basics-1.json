@@ -1,14 +1,14 @@
 {
     "id": "function-basics-1",
     "order": 2,
-    "title": "Function basics",
+    "title": "Two-round score total",
     "category": "Function",
-    "summary": "Trace a function return value and compare it with the requested result.",
-    "statement": "Fix doubleValue so it returns twice the input. Predict the value of the return expression when the input is 3.",
+    "summary": "Correct one function return expression to calculate the score from two identical rounds.",
+    "statement": "A player earns the same number of points in each of two identical rounds. The program reads the points earned in one round and uses doubleValue to display the combined score. Change only the return expression inside doubleValue so the function returns twice its input; leave the function signature and the rest of the program unchanged. Before running, predict the function's return value for the selected round score.",
     "specification": {
-        "input": "One integer value.",
-        "output": "Print twice the input value followed by a newline.",
-        "constraints": "Use a function returning an integer; keep the program as a single-file C++17 program."
+        "input": "One integer: the points earned in one round.",
+        "output": "Print the total points from two rounds with the same score, followed by a newline.",
+        "constraints": "The input score is an integer from 0 through 1,000,000.\nChange only the expression in the return statement inside doubleValue.\nKeep the function name, parameter, return type, input/output code, and main function unchanged.\nSubmit a single-file C++17 program."
     },
     "starter_code": "#include <iostream>\nusing namespace std;\n\nint doubleValue(int value) {\n    return value + 1;\n}\n\nint main() {\n    int value;\n    cin >> value;\n    cout << doubleValue(value) << endl;\n    return 0;\n}\n",
     "sample_tests": [
@@ -25,7 +25,7 @@
             "anchor": "cout\\s*<<\\s*doubleValue\\s*\\(",
             "kind": "value",
             "expr": "doubleValue(value)",
-            "question": "What value does this function call return for the selected input?",
+            "question": "What combined two-round score should doubleValue return for the selected input?",
             "tests": [
                 {"label": "Input 3", "input": "3", "op": "eq", "expected": "6", "expected_output": "6"},
                 {"label": "Input 4", "input": "4", "op": "eq", "expected": "8", "expected_output": "8"}

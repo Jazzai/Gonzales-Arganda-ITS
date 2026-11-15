@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from .classifier import classify
 from .config import settings
-from .eed import decide
+from .eed import decide, meets_spec
 from .exercises import get_exercise, list_exercises, student_view
 from .hints import generate_hint
 from .logger import log_event
@@ -106,7 +106,7 @@ async def check(req: CheckRequest):
         raise HTTPException(400, "Bad checkpoint or test case")
     test = cp["tests"][req.test_case]
 
-    if req.prediction is None:
+    if req.prediction is None and req.condition == "eed":
         log_event({
             "participant_id": req.participant_id, "session": req.session_id,
             "exercise": ex["id"], "checkpoint": cp["id"], "condition": req.condition,
@@ -159,11 +159,68 @@ async def check(req: CheckRequest):
     hidden_passed, hidden_total = await run_hidden_tests(req.code, cp, ex)
     hidden_tests_ok = hidden_passed == hidden_total
     output_ok = sample_output_ok and hidden_tests_ok
-    case = decide(req.prediction, actual, test["expected"], test["op"], output_ok)
-    key = (req.session_id, cp["id"])
+    code_ok = meets_spec(actual, test["expected"], test["op"]) and output_ok
+    key = (req.session_id, cp["id"], req.condition)
     tutor, category = None, None
     hint_exhausted = False
     hint_level = 0
+
+    if req.condition == "generic":
+        if not code_ok:
+            hint_exhausted = current_level(key) >= 3
+            hint_level = next_level(key)
+            message = await generate_hint(
+                level=hint_level, condition=req.condition, statement=ex["statement"],
+                code=req.code, question=cp["question"], prediction=None,
+                actual=None, required=None, category=None,
+            )
+            tutor = {
+                "level": hint_level,
+                "message": message,
+                "exhausted": hint_exhausted,
+            }
+        else:
+            reset(key)
+
+        log_event({
+            "participant_id": req.participant_id, "session": req.session_id,
+            "exercise": ex["id"], "checkpoint": cp["id"], "condition": req.condition,
+            "prediction": None, "actual": actual, "required": required,
+            "case": None, "category": None, "tutor": tutor,
+            "hint_level": hint_level, "hint_exhausted": hint_exhausted,
+            "stdout": stdout, "timed_out": timed_out, "exit_code": exit_code,
+            "output_ok": output_ok, "sample_output_ok": sample_output_ok,
+            "hidden_tests_passed": hidden_passed, "hidden_tests_total": hidden_total,
+            "status": "generic_complete" if code_ok else "generic_needs_revision",
+        })
+        return {
+            "status": "ok",
+            "condition": req.condition,
+            "goal_met": code_ok,
+            "comparison": {
+                "actual": actual,
+                "required": required,
+                "operator": test["op"],
+                "expected": test["expected"],
+                "expression": cp["expr"],
+            },
+            "stdout": stdout,
+            "timed_out": timed_out,
+            "exit_code": exit_code,
+            "runtime_ok": runtime_ok,
+            "output_ok": output_ok,
+            "sample_output_ok": sample_output_ok,
+            "hidden_test_summary": {"passed": hidden_passed, "total": hidden_total},
+            "trace": [{
+                "line": checkpoint_line,
+                "label": cp["question"],
+                "expression": cp["expr"],
+                "value": actual,
+            }],
+            "tutor": tutor,
+        }
+
+    case = decide(req.prediction, actual, test["expected"], test["op"], output_ok)
 
     if case == "C":
         category = classify(req.code, checkpoint_line)
@@ -201,6 +258,7 @@ async def check(req: CheckRequest):
     })
     return {
         "status": "ok",
+        "condition": req.condition,
         "case": case,
         "comparison": {
             "prediction": req.prediction,

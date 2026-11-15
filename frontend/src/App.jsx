@@ -115,6 +115,8 @@ function App() {
   const [history, setHistory] = useState(() => readStorage(HISTORY_KEY, []))
   const [participantId, setParticipantId] = useState(() => localStorage.getItem(PARTICIPANT_KEY) || makeId('P'))
   const [exerciseError, setExerciseError] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resettingExerciseId, setResettingExerciseId] = useState(null)
   const [pageBusy, setPageBusy] = useState(false)
   const [backendError, setBackendError] = useState('')
   const [checkpointActive, setCheckpointActive] = useState(false)
@@ -122,6 +124,7 @@ function App() {
   const [lastPrediction, setLastPrediction] = useState(null)
   const [predictionPending, setPredictionPending] = useState(false)
   const [result, setResult] = useState(null)
+  const [traceAttempts, setTraceAttempts] = useState([])
   const [activeTab, setActiveTab] = useState('prediction')
   const [hintVisible, setHintVisible] = useState(true)
   const [aiOpen, setAiOpen] = useState(false)
@@ -208,7 +211,40 @@ function App() {
     setLastPrediction(null)
     setPredictionPending(false)
     setResult(null)
+    setTraceAttempts([])
     setBackendError('')
+  }
+
+  const resetActivity = async (id) => {
+    setResettingExerciseId(id)
+    setResetError('')
+    try {
+      const response = await fetch(`${API_URL}/api/exercises/${id}`)
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.detail || `The backend returned HTTP ${response.status}.`)
+      localStorage.setItem(exerciseStorageKey(id), data.starter_code)
+      if (id === exerciseId) {
+        setExercise(data)
+        setCode(data.starter_code)
+        setSessionId(makeId('S'))
+        setCheckpointIndex(0)
+        setTestCaseIndex(0)
+        setCheckpointActive(false)
+        setPrediction('')
+        setLastPrediction(null)
+        setPredictionPending(false)
+        setResult(null)
+        setTraceAttempts([])
+        setBackendError('')
+        setActiveTab(settings.condition === 'generic' ? 'trace' : 'prediction')
+        setHintVisible(true)
+        setAiOpen(false)
+      }
+    } catch (error) {
+      setResetError(error.message || 'Could not reset the activity.')
+    } finally {
+      setResettingExerciseId(null)
+    }
   }
 
   const beginExercise = () => {
@@ -218,6 +254,7 @@ function App() {
     setLastPrediction(null)
     setPredictionPending(false)
     setResult(null)
+    setTraceAttempts([])
     setBackendError('')
     setSessionId(makeId('S'))
     setCheckpointIndex(0)
@@ -230,7 +267,7 @@ function App() {
   const startCheckpoint = () => {
     if (!exercise || pageBusy) return
     setCheckpointActive(true)
-    setActiveTab('prediction')
+    setActiveTab(settings.condition === 'generic' ? 'trace' : 'prediction')
     setBackendError('')
   }
 
@@ -260,7 +297,7 @@ function App() {
       startCheckpoint()
       return
     }
-    if (!lastPrediction) {
+    if (settings.condition === 'eed' && !lastPrediction) {
       setBackendError('Enter your prediction and select Submit Prediction before running the check.')
       return
     }
@@ -306,18 +343,31 @@ function App() {
       }
       if (data.status !== 'ok') throw new Error(data.detail || `Unexpected backend response: ${data.status || 'unknown status'}.`)
       setResult(data)
+      setTraceAttempts((previous) => [
+        ...previous,
+        {
+          id: crypto.randomUUID(),
+          condition: data.condition || settings.condition,
+          case: data.case,
+          goalMet: data.goal_met,
+          trace: data.trace || [],
+          timedOut: data.timed_out,
+        },
+      ])
       setPredictionPending(false)
-      setActiveTab('prediction')
+      setActiveTab(settings.condition === 'generic' ? 'trace' : 'prediction')
       setHistory((previous) => [{
         id: crypto.randomUUID(),
         date: new Date().toISOString(),
         exerciseId,
         exerciseTitle: exercise.title,
-        prediction: lastPrediction,
+        prediction: settings.condition === 'generic' ? null : lastPrediction,
         case: data.case,
         hintLevel: data.tutor?.level || 0,
-        condition: settings.condition,
-        outcome: data.case === 'A' ? 'Resolved' : data.case === 'C' ? 'Hint shown' : data.case === 'D' ? 'Revise code' : 'Review prediction',
+        condition: data.condition || settings.condition,
+        outcome: data.condition === 'generic'
+          ? data.goal_met ? 'Requirement met' : 'Guidance shown'
+          : data.case === 'A' ? 'Resolved' : data.case === 'C' ? 'Hint shown' : data.case === 'D' ? 'Revise code' : 'Review prediction',
       }, ...previous].slice(0, 100))
     } catch (error) {
       setBackendError(error.message || 'The check could not be completed.')
@@ -329,6 +379,15 @@ function App() {
   const updateSetting = (key, value) => {
     setSettings((current) => ({ ...current, [key]: value }))
     if (key === 'fontSize') setFontSize(value)
+    if (key === 'condition' && value !== settings.condition) {
+      setResult(null)
+      setLastPrediction(null)
+      setPrediction('')
+      setPredictionPending(false)
+      setHintVisible(false)
+      setAiOpen(false)
+      setTraceAttempts([])
+    }
   }
   const updateParticipantId = (value) => {
     const normalized = value.trim().slice(0, 80)
@@ -390,7 +449,8 @@ function App() {
         </div>
         <nav className="primary-nav" aria-label="Main navigation">
           {NAV_ITEMS.map((item) => (
-            <button key={item.id} className={`nav-item ${view === item.id ? 'selected' : ''}`} type="button"
+            <button key={item.id} className={`nav-item ${view === item.id || (item.id === 'activities' && ['details', 'history'].includes(view)) ? 'selected' : ''}`} type="button"
+              aria-current={view === item.id || (item.id === 'activities' && ['details', 'history'].includes(view)) ? 'page' : undefined}
               onClick={() => setView(item.id)}>
               <Icon name={item.icon} size={19} /><span>{item.label}</span>
             </button>
@@ -402,7 +462,8 @@ function App() {
         <div className="sidebar-label">ACTIVITIES</div>
         <div className="activity-nav">
           {exercises.map((item, index) => (
-            <button key={item.id} className={`nav-item ${item.id === exerciseId && view === 'editor' ? 'selected' : ''}`}
+            <button key={item.id} className={`nav-item ${item.id === exerciseId && ['editor', 'details', 'history'].includes(view) ? 'selected' : ''}`}
+              aria-current={item.id === exerciseId && ['editor', 'details', 'history'].includes(view) ? 'page' : undefined}
               type="button" onClick={() => selectActivity(item.id)}>
               <Icon name="book" size={19} /><span>Activity {index + 1} · {item.title}</span>
             </button>
@@ -433,10 +494,10 @@ function App() {
             checkpointActive={checkpointActive}
             checkpoint={checkpoint}
             checkpointIndex={checkpointIndex}
-            setCheckpointIndex={(value) => { setCheckpointIndex(value); setTestCaseIndex(0); setResult(null); setLastPrediction(null); setPrediction('') }}
+            setCheckpointIndex={(value) => { setCheckpointIndex(value); setTestCaseIndex(0); setResult(null); setTraceAttempts([]); setLastPrediction(null); setPrediction('') }}
             testCase={testCase}
             testCaseIndex={testCaseIndex}
-            setTestCaseIndex={(value) => { setTestCaseIndex(value); setResult(null); setLastPrediction(null); setPrediction('') }}
+            setTestCaseIndex={(value) => { setTestCaseIndex(value); setResult(null); setTraceAttempts([]); setLastPrediction(null); setPrediction('') }}
             prediction={prediction}
             setPrediction={setPrediction}
             lastPrediction={lastPrediction}
@@ -448,6 +509,7 @@ function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             result={result}
+            traceAttempts={traceAttempts}
             outcome={outcome}
             comparison={comparison}
             requiredText={requiredText}
@@ -462,7 +524,8 @@ function App() {
             participantId={participantId}
           />
         )}
-        {view === 'activities' && <Activities exercises={exercises} onOpen={selectActivity} />}
+        {view === 'activities' && <Activities exercises={exercises} onOpen={selectActivity}
+          onReset={resetActivity} resettingExerciseId={resettingExerciseId} resetError={resetError} />}
         {view === 'details' && <ActivityDetails exercise={exercise} error={exerciseError} loading={pageBusy} onStart={beginExercise} onHistory={() => setView('history')} />}
         {view === 'history' && <HistoryPage history={history} onBack={() => setView('details')} />}
         {view === 'logic' && <LogicPage />}
@@ -519,7 +582,7 @@ function WelcomePage({ onEnter }) {
   )
 }
 
-function AITutorBauble({ hint, hintVisible, aiOpen, onToggle, onDismiss }) {
+function AITutorBauble({ hint, hintVisible, aiOpen, condition, onToggle, onDismiss }) {
   const [position, setPosition] = useState(readBaublePosition)
   const [isDragging, setIsDragging] = useState(false)
   const dragRef = useRef(null)
@@ -605,15 +668,17 @@ function AITutorBauble({ hint, hintVisible, aiOpen, onToggle, onDismiss }) {
       {isOpen && (
         <aside className="ai-bauble-card" style={cardPosition} aria-live="polite">
           <div className="ai-bauble-card-heading">
+            <img className="ai-bauble-card-avatar" src={baubleImage} alt="" />
             <div className="ai-bauble-card-title">
-              <span>{hint ? 'READ-ONLY' : 'PRACTICE C++ TUTOR'}</span>
-              {hint && <strong>{hint.exhausted ? 'Fallback · support complete' : hint.level < 4 ? `Hint ${hint.level} of 3` : 'Fallback'}</strong>}
+              <strong className="ai-bauble-name">C++ Study Coach</strong>
+              <span className="ai-bauble-mode">{condition === 'eed' ? 'EED-guided tutor' : 'General Socratic tutor'}</span>
+              {hint && <span className="ai-bauble-level">{hint.exhausted ? 'Fallback · support complete' : hint.level < 4 ? `Guidance ${hint.level} of 3` : 'Fallback guidance'}</span>}
             </div>
             <button type="button" onClick={onDismiss} aria-label="Dismiss AI tutor message">
               <Icon name="close" size={16} />
             </button>
           </div>
-          <p>{hint?.message || 'AI guidance appears after you submit a prediction and run a check. Drag me anywhere on the screen.'}</p>
+          <p>{hint?.message || 'I’m here to help you reason through your C++ code. Make a prediction and run a check, then we can reflect on what happened.'}</p>
           {hint && <button className="ai-bauble-dismiss" type="button" onClick={onDismiss}>Dismiss</button>}
         </aside>
       )}
@@ -627,7 +692,8 @@ function AITutorBauble({ hint, hintVisible, aiOpen, onToggle, onDismiss }) {
         onClick={handleClick}
       >
         <img src={baubleImage} alt="" draggable="false" />
-        {hint && !hintVisible && <span className="ai-bauble-badge" aria-label="New tutor hint">1</span>}
+        {hint && !hintVisible && <span className="ai-bauble-badge" aria-label="New tutor guidance">!</span>}
+        <span className="ai-bauble-label">TUTOR</span>
       </button>
     </div>
   )
@@ -650,7 +716,7 @@ function Workspace(props) {
     exercise, loading, loadError, retry, code, setCode, lineCount, activeLine, stateLabel,
     checkpointActive, checkpoint, testCase, testCaseIndex, setTestCaseIndex,
     prediction, setPrediction, lastPrediction, predictionPending, submitPrediction,
-    runCheck, submitNotSure, pageBusy, activeTab, setActiveTab, result, outcome, comparison, requiredText,
+    runCheck, submitNotSure, pageBusy, activeTab, setActiveTab, result, traceAttempts, outcome, comparison, requiredText,
     actualValue, backendError, hintVisible, closeHint, aiOpen, toggleAiTutor, fontSize,
     condition, participantId, checkpointIndex, setCheckpointIndex,
   } = props
@@ -746,24 +812,30 @@ function Workspace(props) {
             hint={result?.tutor}
             hintVisible={hintVisible}
             aiOpen={aiOpen}
+            condition={result?.condition || condition}
             onToggle={toggleAiTutor}
             onDismiss={closeHint}
           />
 
           <section className="console-panel">
             <div className="console-tabs" role="tablist" aria-label="Workspace panels">
-              <button className={activeTab === 'prediction' ? 'active' : ''} type="button" role="tab" aria-selected={activeTab === 'prediction'} onClick={() => setActiveTab('prediction')}>
-                <Icon name="help" size={17} />Prediction
-              </button>
+              {condition === 'eed' && (
+                <button className={activeTab === 'prediction' ? 'active' : ''} type="button" role="tab" aria-selected={activeTab === 'prediction'} onClick={() => setActiveTab('prediction')}>
+                  <Icon name="help" size={17} />Prediction
+                </button>
+              )}
               <button className={activeTab === 'trace' ? 'active' : ''} type="button" role="tab" aria-selected={activeTab === 'trace'} onClick={() => setActiveTab('trace')}>
                 <Icon name="refresh" size={17} />Execution Trace
               </button>
               <button className={activeTab === 'output' ? 'active' : ''} type="button" role="tab" aria-selected={activeTab === 'output'} onClick={() => setActiveTab('output')}>
                 <Icon name="book" size={17} />Output
               </button>
+              <button className={activeTab === 'problem' ? 'active' : ''} type="button" role="tab" aria-selected={activeTab === 'problem'} onClick={() => setActiveTab('problem')}>
+                <Icon name="help" size={17} />Problem
+              </button>
             </div>
 
-            {activeTab === 'prediction' && (
+            {condition === 'eed' && activeTab === 'prediction' && (
               <div className="console-content prediction-grid">
                 <div className="prediction-form">
                   <h3>{predictionPending && result ? `Revised prediction · Line ${result?.trace?.[0]?.line || checkpoint?.line}` : result?.case === 'A' ? 'Verified prediction' : result?.case === 'B' ? 'Revise your prediction' : lastPrediction ? `Your prediction · Line ${result?.trace?.[0]?.line || checkpoint?.line}` : 'Your prediction'}</h3>
@@ -824,21 +896,41 @@ function Workspace(props) {
 
             {activeTab === 'trace' && (
               <div className="trace-content">
-                <h3>{comparison ? `Execution Trace · attempt ${result.tutor?.level || 1}` : 'Execution Trace'}</h3>
-                {comparison ? (
-                  <div className="trace-list">
-                    {(result.trace || []).map((event, index) => (
-                      <TraceRow key={`${event.line}-${index}`} number={index + 1}
-                        title={`Line ${event.line} · ${event.label}`}
-                        detail={`${event.expression} = ${event.value}`}
-                        tone={outcome === 'C' ? 'error' : outcome === 'A' ? 'success' : ''} />
-                    ))}
-                    {result.timed_out && <div className="inline-note">Execution stopped after reaching the configured time limit.</div>}
-                  </div>
+                <h3>Execution Trace{traceAttempts.length ? ` · ${traceAttempts.length} ${traceAttempts.length === 1 ? 'run' : 'runs'}` : ''}</h3>
+                {traceAttempts.length ? (
+                  <>
+                    <div className="trace-attempts">
+                      {traceAttempts.map((attempt, index) => {
+                        const passed = attempt.condition === 'generic'
+                          ? attempt.goalMet
+                          : attempt.case === 'A' || attempt.case === 'B'
+                        const outcomeLabel = attempt.condition === 'generic'
+                          ? attempt.goalMet ? 'Requirement met' : 'Needs revision'
+                          : `Outcome ${attempt.case}`
+                        return (
+                          <section className={`trace-attempt ${passed ? 'trace-attempt-success' : 'trace-attempt-review'}`} key={attempt.id}>
+                            <div className="trace-attempt-heading">
+                              <strong>Attempt {index + 1}</strong>
+                              <span>{attempt.condition === 'generic' ? 'Generic' : 'EED'} · {outcomeLabel}</span>
+                            </div>
+                            <div className="trace-list">
+                              {attempt.trace.map((event, eventIndex) => (
+                                <TraceRow key={`${attempt.id}-${eventIndex}`} number={eventIndex + 1}
+                                  title={`Line ${event.line} · ${event.label}`}
+                                  detail={`${event.expression} = ${event.value}`}
+                                  tone={passed ? 'success' : 'error'} />
+                              ))}
+                            </div>
+                            {attempt.timedOut && <div className="inline-note">Execution stopped after reaching the configured time limit.</div>}
+                          </section>
+                        )
+                      })}
+                    </div>
+                  </>
                 ) : (
                   <div className="trace-card">
                     <strong>{result?.status === 'checkpoint_not_reached' ? 'Checkpoint not reached' : checkpointActive ? `Paused before line ${checkpoint?.line}` : 'No run yet'}</strong>
-                    <span>{result?.detail || result?.runtime_error || (result?.timed_out ? 'Execution reached the configured time limit.' : 'Submit a prediction, then use Run &amp; Check to see runtime values.')}</span>
+                    <span>{result?.detail || result?.runtime_error || (result?.timed_out ? 'Execution reached the configured time limit.' : condition === 'generic' ? 'Select Run & Check to execute and record the result.' : 'Submit a prediction, then use Run &amp; Check to see runtime values.')}</span>
                   </div>
                 )}
               </div>
@@ -848,21 +940,67 @@ function Workspace(props) {
               <div className="output-content">
                 <h3>Program Output</h3>
                 {!result || result.status === 'not_sure' ? (
-                  <div className="trace-card"><strong>No output yet</strong><span>The backend checks the checkpoint and prediction together.</span></div>
+                  <div className="trace-card"><strong>No output yet</strong><span>{condition === 'generic' ? 'Select Run & Check to execute your code and inspect its output.' : 'The backend checks the checkpoint and prediction together.'}</span></div>
                 ) : result.status === 'compile_error' ? (
-                  <div className="trace-card"><strong>Compilation failed</strong><span>Fix the compiler errors shown above, then submit a new prediction.</span></div>
+                  <div className="trace-card"><strong>Compilation failed</strong><span>{condition === 'generic' ? 'Review the compiler error, update your code, then run it again.' : 'Fix the compiler errors shown above, then submit a new prediction.'}</span></div>
                 ) : result.status === 'checkpoint_not_reached' ? (
                   <div className="trace-card"><strong>{result.timed_out ? 'Execution timed out before the checkpoint' : 'Checkpoint not reached'}</strong><span>{result.detail || result.runtime_error || 'Review the code and run the check again.'}</span></div>
                 ) : (
                   <>
                     <pre className="output-terminal"><span className="terminal-prompt">$</span>{result.stdout ? `\n${result.stdout.trimEnd()}` : ' (no standard output)'}</pre>
-                    <div className={`result-summary ${outcome === 'A' ? 'summary-success' : outcome === 'C' || outcome === 'D' || result.output_ok === false ? 'summary-error' : 'summary-neutral'}`}>
-                      <strong>{outcome === 'A' ? 'Exercise requirement met' : outcome === 'B' ? 'Prediction differed from execution' : outcome === 'C' ? 'The required result is not met yet' : outcome === 'D' ? 'Prediction matched; revise the code' : 'Check complete'}</strong>
+                    <div className={`result-summary ${condition === 'generic'
+                      ? result.goal_met ? 'summary-success' : 'summary-error'
+                      : outcome === 'A' ? 'summary-success' : outcome === 'C' || outcome === 'D' || result.output_ok === false ? 'summary-error' : 'summary-neutral'}`}>
+                      <strong>{condition === 'generic'
+                        ? result.goal_met ? 'Exercise requirement met' : 'Revise the code and run again'
+                        : outcome === 'A' ? 'Exercise requirement met' : outcome === 'B' ? 'Prediction differed from execution' : outcome === 'C' ? 'The required result is not met yet' : outcome === 'D' ? 'Prediction matched; revise the code' : 'Check complete'}</strong>
                       <span>{comparison
                         ? `Observed ${comparison.expression} = ${comparison.actual} · ${result.sample_output_ok ? 'sample output matches' : 'sample output does not match'} · hidden tests ${result.hidden_test_summary?.passed ?? 0}/${result.hidden_test_summary?.total ?? 0} · required ${requiredText}`
                         : 'The backend returned a result for this attempt.'}</span>
                     </div>
                   </>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'problem' && (
+              <div className="problem-content">
+                <div className="problem-heading">
+                  <span className="category-chip">{exercise?.category}</span>
+                  <h3>{exercise?.title || 'Activity instructions'}</h3>
+                  <p>{exercise?.statement}</p>
+                </div>
+                <div className="problem-specifications">
+                  <section>
+                    <h4>Input</h4>
+                    <p>{exercise?.specification?.input}</p>
+                  </section>
+                  <section>
+                    <h4>Output</h4>
+                    <p>{exercise?.specification?.output}</p>
+                  </section>
+                </div>
+                <section className="problem-constraints">
+                  <h4>Constraints</h4>
+                  <ul>
+                    {(exercise?.specification?.constraints || '').split('\n').filter(Boolean).map((constraint, index) => (
+                      <li key={`${index}-${constraint}`}>{constraint}</li>
+                    ))}
+                  </ul>
+                </section>
+                {exercise?.sample_tests?.length > 0 && (
+                  <section className="problem-samples">
+                    <h4>Sample cases</h4>
+                    <div className="problem-sample-list">
+                      {exercise.sample_tests.map((sample) => (
+                        <article key={sample.label}>
+                          <strong>{sample.label}</strong>
+                          <span>Input</span><code>{sample.input || '(no input)'}</code>
+                          <span>Expected output</span><code>{sample.expected_output}</code>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
                 )}
               </div>
             )}
@@ -938,13 +1076,30 @@ function TraceRow({ number, title, detail, tone = '' }) {
 }
 
 function PageHeading({ breadcrumb, title, description }) {
-  return <div className="page-heading"><div className="breadcrumb">{breadcrumb}</div><h1>{title}</h1>{description && <p>{description}</p>}</div>
+  const sections = breadcrumb.split('/').map((section) => section.trim())
+  return (
+    <div className="page-heading">
+      <nav className="breadcrumb" aria-label="Breadcrumb">
+        {sections.map((section, index) => (
+          <React.Fragment key={`${section}-${index}`}>
+            {index > 0 && <span className="breadcrumb-separator" aria-hidden="true">/</span>}
+            <span className={index === sections.length - 1 ? 'breadcrumb-current' : ''} aria-current={index === sections.length - 1 ? 'page' : undefined}>
+              {section}
+            </span>
+          </React.Fragment>
+        ))}
+      </nav>
+      <h1>{title}</h1>
+      {description && <p>{description}</p>}
+    </div>
+  )
 }
 
-function Activities({ exercises, onOpen }) {
+function Activities({ exercises, onOpen, onReset, resettingExerciseId, resetError }) {
   return (
     <div className="page-view">
       <PageHeading breadcrumb="Workspace / My Activities" title="My Activities" description="Choose an activity to practice predicting and tracing C++ code." />
+      {resetError && <div className="error-banner" role="alert">{resetError}</div>}
       <div className="activity-cards">
         {exercises.map((activity, index) => (
           <article className="activity-card" key={activity.id}>
@@ -957,6 +1112,12 @@ function Activities({ exercises, onOpen }) {
               <span className="status-chip active">Available</span>
               <button className="button button-secondary" type="button" onClick={() => onOpen(activity.id)}>
                 View activity
+              </button>
+              <button className="button button-secondary activity-reset-button" type="button"
+                onClick={() => onReset(activity.id)} disabled={resettingExerciseId !== null}
+                title="Restore the original starter code. Attempt history is kept.">
+                <Icon name="refresh" size={15} />
+                {resettingExerciseId === activity.id ? 'Resetting…' : 'Reset code'}
               </button>
             </div>
           </article>
@@ -982,7 +1143,14 @@ function ActivityDetails({ exercise, error, loading, onStart, onHistory }) {
             <div><h3>Input</h3><p>{exercise.specification.input}</p></div>
             <div><h3>Output</h3><p>{exercise.specification.output}</p></div>
           </div>
-          <p className="muted-text">Constraints: {exercise.specification.constraints}</p>
+          <section className="detail-constraints" aria-labelledby="constraints-heading">
+            <h3 id="constraints-heading">Constraints</h3>
+            <ul>
+              {exercise.specification.constraints.split('\n').map((constraint, index) => (
+                <li key={`${index}-${constraint}`}>{constraint}</li>
+              ))}
+            </ul>
+          </section>
         </section>
         <h2 className="section-title">Sample test cases</h2>
         <div className="sample-grid">
@@ -1013,7 +1181,9 @@ function HistoryPage({ history, onBack }) {
           <tbody>
             {history.length ? history.map((entry, index) => (
               <tr key={entry.id}><td>Attempt {history.length - index}</td><td>{entry.exerciseTitle || entry.exerciseId || 'Activity'}</td><td>{formatDate(entry.date)}</td>
-                <td><span className={`status-chip ${entry.case === 'A' || entry.case === 'D' ? 'active' : ''}`}>{entry.case === 'A' || entry.case === 'D' ? 'Matched' : 'Differed'}</span></td>
+                <td><span className={`status-chip ${entry.condition === 'generic' ? entry.outcome === 'Requirement met' ? 'active' : '' : entry.case === 'A' || entry.case === 'D' ? 'active' : ''}`}>
+                  {entry.condition === 'generic' ? entry.outcome === 'Requirement met' ? 'Met' : 'Review' : entry.case === 'A' || entry.case === 'D' ? 'Matched' : 'Differed'}
+                </span></td>
                 <td>{entry.condition === 'generic' ? 'Generic' : 'EED-guided'}</td>
                 <td>{entry.hintLevel ? `Level ${Math.min(entry.hintLevel, 3)}${entry.hintLevel > 3 ? ' · fallback' : ''}` : '—'}</td>
                 <td className={entry.case === 'A' ? 'text-success' : ''}>{entry.outcome}</td></tr>

@@ -74,10 +74,66 @@ def test_generic_prompt_does_not_receive_divergence_evidence():
     assert "PRIVATE_CATEGORY" not in prompt
 
 
-def test_level_four_uses_direct_fallback_without_calling_llm(monkeypatch):
+def test_eed_prompt_includes_checkpoint_divergence_evidence():
+    prompt = build_prompt(
+        level=1,
+        condition="eed",
+        statement="A practice exercise",
+        code="int value = 2;",
+        question="What value reaches the checkpoint?",
+        prediction="3",
+        actual="2",
+        required="eq 2",
+        category="Computation",
+    )
+    assert "Checkpoint question: What value reaches the checkpoint?" in prompt
+    assert "Student predicted: 3" in prompt
+    assert "Actual value: 2" in prompt
+    assert "Required: eq 2" in prompt
+    assert "Error category: Computation" in prompt
+
+
+def test_hint_uses_condition_specific_system_instructions(monkeypatch):
+    calls = []
+
+    async def fixed_chat(system, prompt):
+        calls.append((system, prompt))
+        return "What do you notice?"
+
+    monkeypatch.setattr("app.hints.chat", fixed_chat)
+    common = {
+        "level": 1,
+        "statement": "A practice exercise",
+        "code": "int value = 2;",
+        "question": "What value reaches the checkpoint?",
+        "prediction": "3",
+        "actual": "2",
+        "required": "eq 2",
+        "category": "Computation",
+    }
+
+    for condition in ("generic", "eed"):
+        asyncio.run(generate_hint(condition=condition, **common))
+
+    generic_system, generic_prompt = calls[0]
+    eed_system, eed_prompt = calls[1]
+    assert "Do not refer to predictions, observed runtime values" in generic_system
+    assert "Actual value: 2" not in generic_prompt
+    assert "expectation-execution difference" in eed_system
+    assert "Actual value: 2" in eed_prompt
+
+
+@pytest.mark.parametrize(
+    "condition, expected",
+    [
+        ("eed", STATIC_FALLBACK["eed"][4]),
+        ("generic", STATIC_FALLBACK["generic"][4]),
+    ],
+)
+def test_level_four_uses_condition_specific_fallback_without_calling_llm(monkeypatch, condition, expected):
     async def unexpected_chat(*_args):
         raise AssertionError("The exhausted tutor must not call the LLM.")
 
     monkeypatch.setattr("app.hints.chat", unexpected_chat)
-    hint = asyncio.run(generate_hint(level=4))
-    assert hint == STATIC_FALLBACK[4]
+    hint = asyncio.run(generate_hint(level=4, condition=condition))
+    assert hint == expected
